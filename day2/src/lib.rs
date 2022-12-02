@@ -1,7 +1,7 @@
 type Score = i64;
 
 #[derive(Copy, Clone)]
-enum Move {
+pub enum Move {
     Rock,
     Paper,
     Scissors,
@@ -11,6 +11,23 @@ impl Move {
     fn get_score_for_move(&self) -> Score {
         (*self as Score) + 1
     }
+
+    fn get_winning_move(&self) -> Move {
+        Move::from_i32(((*self as i32) + 1) % 3)
+    }
+
+    fn get_losing_move(&self) -> Move {
+        Move::from_i32(((*self as i32) - 1).rem_euclid(3))
+    }
+
+    fn from_i32(i: i32) -> Move {
+        match i {
+            0 => Move::Rock,
+            1 => Move::Paper,
+            2 => Move::Scissors,
+            _ => panic!("Invalid index {i}"),
+        }
+    }
 }
 
 struct Round {
@@ -18,27 +35,47 @@ struct Round {
     player_move: Move,
 }
 
-pub fn calculate_total_score(input: &str) -> Score {
+pub fn calculate_total_score_1(input: &str) -> Score {
+    let decoder = |_opponent_move: Move, player_move: String| match player_move.as_str() {
+        "X" => Move::Rock,
+        "Y" => Move::Paper,
+        "Z" => Move::Scissors,
+        _ => panic!("Unexpected input: {player_move}"),
+    };
+
+    calculate_total_score(input, decoder)
+}
+
+pub fn calculate_total_score_2(input: &str) -> Score {
+    let decoder = |opponent_move: Move, player_move: String| match player_move.as_str() {
+        "X" => opponent_move.get_losing_move(),
+        "Y" => opponent_move,
+        "Z" => opponent_move.get_winning_move(),
+        _ => panic!("Unexpected input: {player_move}"),
+    };
+
+    calculate_total_score(input, decoder)
+}
+
+fn calculate_total_score<F>(input: &str, decode: F) -> Score
+where
+    F: Fn(Move, String) -> Move,
+{
     input
         .lines()
         .map(|line| {
             let line = line.split_whitespace().collect::<Vec<_>>();
-            let opponent_move = line[0];
-            let player_move = line[1];
+            let opponent_move_str = line[0];
+            let player_move_str = line[1];
 
-            let opponent_move = match opponent_move {
+            let opponent_move = match opponent_move_str {
                 "A" => Move::Rock,
                 "B" => Move::Paper,
                 "C" => Move::Scissors,
-                _ => panic!("Unexpected input: {opponent_move}"),
+                _ => panic!("Unexpected input: {opponent_move_str}"),
             };
 
-            let player_move = match player_move {
-                "X" => Move::Rock,
-                "Y" => Move::Paper,
-                "Z" => Move::Scissors,
-                _ => panic!("Unexpected input: {player_move}"),
-            };
+            let player_move = decode(opponent_move, player_move_str.to_string());
 
             let round = Round {
                 opponent_move,
@@ -74,13 +111,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn calculate_total_score_simple_case() {
+    fn calculate_total_score_1_simple_case() {
         let input = "\
 A Y
 B X
 C Z";
 
-        assert_eq!(calculate_total_score(input), 15);
+        assert_eq!(calculate_total_score_1(input), 15);
+    }
+
+    #[test]
+    fn calculate_total_score_2_simple_case() {
+        let input = "\
+A Y
+B X
+C Z";
+
+        assert_eq!(calculate_total_score_2(input), 12);
     }
 
     #[test]
