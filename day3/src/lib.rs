@@ -19,6 +19,23 @@ fn calculate_priority_of_duplicate_item(rucksack: &str) -> u32 {
     panic!("Could not find common item in each part of rucksack {rucksack}");
 }
 
+pub fn calculate_sum_of_priorities_of_badges(input: &str) -> u32 {
+    let lines = input.lines().collect::<Vec<_>>();
+    let groups = lines.chunks(3).map(|c| (c[0], c[1], c[2]));
+
+    groups
+        .map(|(first, second, third)| {
+            for c in first.chars() {
+                if second.contains(c) && third.contains(c) {
+                    return get_item_priority(c);
+                }
+            }
+
+            panic!("Could not find item in all three rucksacks.")
+        })
+        .sum()
+}
+
 fn get_item_priority(item: char) -> u32 {
     match item {
         'a'..='z' => (item as u32) - ('a' as u32) + 1,
@@ -65,5 +82,18 @@ ttgJtRGJQctTZtZT
 CrZsJsPPZsGzwwsLwLmpwMDw";
 
         assert_eq!(157, calculate_priority_sum_of_duplicate_items(input));
+    }
+
+    #[test]
+    fn calculate_sum_of_priorities_of_badges_simple_case() {
+        let input = "\
+vJrwpWtwJgWrhcsFMMfFFhFp
+jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL
+PmmdzqPrVvPwwTWBwg
+wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn
+ttgJtRGJQctTZtZT
+CrZsJsPPZsGzwwsLwLmpwMDw";
+
+        assert_eq!(70, calculate_sum_of_priorities_of_badges(input));
     }
 }
