@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cmp, collections::HashMap};
 
 use regex::Regex;
 
@@ -26,17 +26,17 @@ fn parse_initial_crates_config(initial_crates_config: &[&str]) -> Stacks {
     let column_numbers = iter.next().unwrap();
 
     // Build a map of start index -> column index map
-    let start_idx_to_column_idx =
-        Regex::new(r"\d")
-            .unwrap()
-            .find_iter(column_numbers)
-            .fold(HashMap::new(), |mut acc, x| {
-                acc.insert(x.start(), x.as_str().parse::<usize>().unwrap() - 1);
-                acc
-            });
+    let (start_idx_to_column_idx, max_column_idx) = Regex::new(r"\d")
+        .unwrap()
+        .find_iter(column_numbers)
+        .fold((HashMap::new(), 0), |(mut hmap, max_col_idx), mat| {
+            let idx = mat.as_str().parse::<usize>().unwrap() - 1;
+            hmap.insert(mat.start(), idx);
 
-    let max_column_idx = start_idx_to_column_idx.values().max().unwrap();
-    let mut stacks: Stacks = vec![vec![]; *max_column_idx + 1];
+            (hmap, cmp::max(idx, max_col_idx))
+        });
+
+    let mut stacks: Stacks = vec![vec![]; max_column_idx + 1];
 
     let re = Regex::new(r"[[:upper:]]").unwrap();
     for l in iter {
@@ -72,13 +72,22 @@ fn parse_commands(commands: &[&str]) -> Vec<MoveCommand> {
         .collect()
 }
 
-pub fn run_commands(stacks: &mut Stacks, commands: Vec<MoveCommand>) {
+#[derive(Debug, Copy, Clone)]
+pub enum CrateMoverModel {
+    CrateMover9000,
+    CrateMover9001,
+}
+
+pub fn run_commands(stacks: &mut Stacks, commands: Vec<MoveCommand>, crate_mover: CrateMoverModel) {
     for command in commands.iter() {
         let move_from_stack = &mut stacks[command.from_col_idx];
         let mut to_move = move_from_stack
             .drain((move_from_stack.len() - command.num_to_move)..)
-            .rev()
             .collect::<Vec<_>>();
+
+        if matches!(crate_mover, CrateMoverModel::CrateMover9000) {
+            to_move.reverse();
+        }
 
         let move_to_stack = &mut stacks[command.to_col_idx];
         move_to_stack.append(&mut to_move);
@@ -114,7 +123,11 @@ mod tests {
 
         let (mut stacks, commands) = parse_input(&input);
 
-        run_commands(&mut stacks, commands.into_iter().take(1).collect());
+        run_commands(
+            &mut stacks,
+            commands.into_iter().take(1).collect(),
+            CrateMoverModel::CrateMover9000,
+        );
 
         let expected = vec![vec!['Z', 'N', 'D'], vec!['M', 'C'], vec!['P']];
         assert_eq!(stacks, expected);
@@ -127,7 +140,7 @@ mod tests {
 
         let (mut stacks, commands) = parse_input(&input);
 
-        run_commands(&mut stacks, commands);
+        run_commands(&mut stacks, commands, CrateMoverModel::CrateMover9000);
 
         let expected = vec![vec!['C'], vec!['M'], vec!['P', 'D', 'N', 'Z']];
         assert_eq!(stacks, expected);
@@ -140,11 +153,27 @@ mod tests {
 
         let (mut stacks, commands) = parse_input(&input);
 
-        run_commands(&mut stacks, commands);
+        run_commands(&mut stacks, commands, CrateMoverModel::CrateMover9000);
 
         let message = get_message(&stacks);
 
         let expected = String::from("CMZ");
+
+        assert_eq!(message, expected);
+    }
+
+    #[test]
+    fn get_message_9001_example() {
+        let input =
+            fs::read_to_string("test_input.txt").expect("Should have been able to read the file");
+
+        let (mut stacks, commands) = parse_input(&input);
+
+        run_commands(&mut stacks, commands, CrateMoverModel::CrateMover9001);
+
+        let message = get_message(&stacks);
+
+        let expected = String::from("MCD");
 
         assert_eq!(message, expected);
     }
