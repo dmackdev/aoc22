@@ -2,32 +2,39 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
-pub enum FSNode {
-    Directory { path: String, children: Vec<FSNode> }, // TODO add indirect children
-    File { path: String, size: u128 },
+pub struct Directory {
+    path: String,
+    files: Vec<File>,
+    indirect_files: Vec<File>,
 }
 
-impl FSNode {
-    fn size(&self) -> u128 {
-        match self {
-            FSNode::Directory { path: _, children } => {
-                let sum = children.iter().map(|c| c.size()).sum();
+#[derive(Debug, Clone)]
+pub struct File {
+    path: String,
+    size: u128,
+}
 
-                if sum > 100000 {
-                    0
-                } else {
-                    sum
-                }
-            }
-            FSNode::File { path: _, size } => *size,
+impl Directory {
+    pub fn size(&self) -> u128 {
+        let sum = self
+            .files
+            .iter()
+            .chain(self.indirect_files.iter())
+            .map(|f| f.size)
+            .sum();
+
+        if sum > 100000 {
+            0
+        } else {
+            sum
         }
     }
 }
 
-pub fn parse_input(input: &str) -> Vec<FSNode> {
+pub fn parse_input(input: &str) -> Vec<Directory> {
     let mut current_path = PathBuf::new();
 
-    let mut fs_map: HashMap<String, FSNode> = HashMap::new();
+    let mut fs_map: HashMap<String, Directory> = HashMap::new();
 
     let lines = input.lines().collect::<Vec<_>>();
     for line in lines.iter() {
@@ -46,12 +53,11 @@ pub fn parse_input(input: &str) -> Vec<FSNode> {
 
                 let abs_path = current_path.to_str().unwrap();
 
-                fs_map
-                    .entry(abs_path.to_string())
-                    .or_insert(FSNode::Directory {
-                        path: abs_path.to_string(),
-                        children: vec![],
-                    });
+                fs_map.entry(abs_path.to_string()).or_insert(Directory {
+                    path: abs_path.to_string(),
+                    files: vec![],
+                    indirect_files: vec![],
+                });
             }
             ["$", "ls"] => println!("Found list directory contents command"),
             ["dir", dir_name] => {
@@ -61,12 +67,11 @@ pub fn parse_input(input: &str) -> Vec<FSNode> {
 
                 let abs_path = current_path.to_str().unwrap();
 
-                fs_map
-                    .entry(abs_path.to_string())
-                    .or_insert(FSNode::Directory {
-                        path: abs_path.to_string(),
-                        children: vec![],
-                    });
+                fs_map.entry(abs_path.to_string()).or_insert(Directory {
+                    path: abs_path.to_string(),
+                    files: vec![],
+                    indirect_files: vec![],
+                });
 
                 current_path.pop();
             }
@@ -76,7 +81,7 @@ pub fn parse_input(input: &str) -> Vec<FSNode> {
                 let mut file_name_path = current_path.clone();
                 file_name_path.push(file_name);
 
-                let f = FSNode::File {
+                let f = File {
                     path: file_name_path.to_str().unwrap().to_string(),
                     size: size.parse::<u128>().unwrap(),
                 };
@@ -84,14 +89,13 @@ pub fn parse_input(input: &str) -> Vec<FSNode> {
                 // Add as child of immediate parent
                 fs_map
                     .entry(current_path.to_str().unwrap().to_string())
-                    .and_modify(|node| {
-                        if let FSNode::Directory { path: _, children } = node {
-                            children.push(f.clone());
-                        }
+                    .and_modify(|directory| {
+                        directory.files.push(f.clone());
                     })
-                    .or_insert(FSNode::Directory {
+                    .or_insert(Directory {
                         path: current_path.to_str().unwrap().to_string(),
-                        children: vec![f.clone()],
+                        files: vec![f.clone()],
+                        indirect_files: vec![],
                     });
 
                 // Add as indirect child to all ancestor directories
@@ -99,14 +103,13 @@ pub fn parse_input(input: &str) -> Vec<FSNode> {
                 while traversing_path.pop() {
                     fs_map
                         .entry(traversing_path.to_str().unwrap().to_string())
-                        .and_modify(|node| {
-                            if let FSNode::Directory { path: _, children } = node {
-                                children.push(f.clone());
-                            }
+                        .and_modify(|directory| {
+                            directory.indirect_files.push(f.clone());
                         })
-                        .or_insert(FSNode::Directory {
+                        .or_insert(Directory {
                             path: traversing_path.to_str().unwrap().to_string(),
-                            children: vec![f.clone()],
+                            files: vec![],
+                            indirect_files: vec![f.clone()],
                         });
                 }
             }
@@ -123,94 +126,17 @@ pub fn parse_input(input: &str) -> Vec<FSNode> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use super::*;
-
-    fn get_dir_a() -> FSNode {
-        FSNode::Directory {
-            path: String::from("a"),
-            children: vec![
-                FSNode::Directory {
-                    path: String::from("e"),
-                    children: vec![FSNode::File {
-                        path: String::from("i"),
-                        size: 584,
-                    }],
-                },
-                FSNode::File {
-                    path: String::from("f"),
-                    size: 29116,
-                },
-                FSNode::File {
-                    path: String::from("g"),
-                    size: 2557,
-                },
-                FSNode::File {
-                    path: String::from("h.lst"),
-                    size: 62596,
-                },
-            ],
-        }
-    }
-
-    #[test]
-    fn calculate_size_a_example() {
-        let dir_a = get_dir_a();
-
-        assert_eq!(dir_a.size(), 94853);
-    }
-
-    #[test]
-    #[ignore]
-    fn calculate_size_root_example() {
-        let dir_root = FSNode::Directory {
-            path: String::from("/"),
-            children: vec![
-                get_dir_a(),
-                FSNode::File {
-                    path: String::from("b.txt"),
-                    size: 14848514,
-                },
-                FSNode::File {
-                    path: String::from("c.dat"),
-                    size: 8504156,
-                },
-                FSNode::Directory {
-                    path: String::from("d"),
-                    children: vec![
-                        FSNode::File {
-                            path: String::from("j"),
-                            size: 4060174,
-                        },
-                        FSNode::File {
-                            path: String::from("d.log"),
-                            size: 8033020,
-                        },
-                        FSNode::File {
-                            path: String::from("d.ext"),
-                            size: 5626152,
-                        },
-                        FSNode::File {
-                            path: String::from("k"),
-                            size: 7214296,
-                        },
-                    ],
-                },
-            ],
-        };
-
-        assert_eq!(dir_root.size(), 48381165);
-    }
+    use std::fs;
 
     #[test]
     fn example() {
         let input =
             fs::read_to_string("test_input.txt").expect("Should have been able to read the file");
 
-        let nodes = parse_input(&input);
+        let dirs = parse_input(&input);
 
-        let sum: u128 = nodes.iter().map(|n| n.size()).sum();
+        let sum: u128 = dirs.iter().map(|n| n.size()).sum();
 
         assert_eq!(sum, 95437);
     }
