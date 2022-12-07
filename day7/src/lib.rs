@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub struct Directory {
     path: String,
-    files: Vec<File>,
-    indirect_files: Vec<File>,
+    files: Vec<Rc<File>>,
+    indirect_files: Vec<Rc<File>>,
 }
 
 #[derive(Debug, Clone)]
@@ -81,10 +82,10 @@ pub fn parse_input(input: &str) -> Vec<Directory> {
                 let mut file_name_path = current_path.clone();
                 file_name_path.push(file_name);
 
-                let f = File {
+                let f = Rc::new(File {
                     path: file_name_path.to_str().unwrap().to_string(),
                     size: size.parse::<u128>().unwrap(),
-                };
+                });
 
                 // Add as child of immediate parent
                 fs_map
