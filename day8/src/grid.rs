@@ -1,38 +1,45 @@
 use std::{marker::PhantomData, slice::Iter, str::FromStr};
 
 pub struct Grid<'a, T> {
-    items: Vec<Vec<T>>,
+    pub items: Vec<Vec<T>>,
     _marker: PhantomData<&'a T>,
 }
 
 impl<'a, T> Grid<'a, T> {
-    fn new(items: Vec<Vec<T>>) -> Grid<'a, T> {
+    pub fn new(items: Vec<Vec<T>>) -> Grid<'a, T> {
         Grid {
             items,
             _marker: PhantomData,
         }
     }
 
-    fn num_rows(&self) -> usize {
+    pub fn num_rows(&self) -> usize {
         self.items.len()
     }
 
-    fn num_columns(&self) -> usize {
+    pub fn num_columns(&self) -> usize {
         self.items[0].len()
     }
 
-    fn row_iter(&self, row_idx: usize) -> Iter<T> {
+    pub fn to_row_col(&self, idx: usize) -> (usize, usize) {
+        let row = idx / self.num_rows();
+        let col = idx % self.num_columns();
+
+        (row, col)
+    }
+
+    pub fn row_iter(&self, row_idx: usize) -> Iter<T> {
         self.items[row_idx].iter()
     }
 
-    fn iter(&self) -> GridIterator<'_, T> {
+    pub fn iter(&self) -> GridIterator<'_, T> {
         GridIterator {
             grid: self,
             curr_idx: 0,
         }
     }
 
-    fn col_iter(&self, col_idx: usize) -> GridColumnIterator<'_, T> {
+    pub fn col_iter(&self, col_idx: usize) -> GridColumnIterator<'_, T> {
         GridColumnIterator {
             grid: self,
             col_idx,
@@ -121,6 +128,15 @@ mod tests {
             grid.items,
             vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]]
         );
+    }
+
+    #[test]
+    fn to_row_col() {
+        let items = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
+        let grid = Grid::new(items);
+
+        assert_eq!(grid.to_row_col(0), (0, 0));
+        assert_eq!(grid.to_row_col(5), (1, 2));
     }
 
     #[test]
