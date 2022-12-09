@@ -39,7 +39,7 @@ pub fn parse_input(input: &str) -> Vec<Command> {
         .collect()
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone)]
 pub struct Point {
     x: i128,
     y: i128,
@@ -74,20 +74,34 @@ impl Sub for Point {
 }
 
 pub struct RopeSimulation {
-    head_pos: Point,
-    tail_pos: Point,
+    points: Vec<Point>,
     pub visited_tail_positions: HashSet<Point>,
 }
 
 impl RopeSimulation {
-    pub fn new() -> RopeSimulation {
-        let origin = Point::new(0, 0);
-        let mut visited_tail_positions = HashSet::new();
-        visited_tail_positions.insert(origin);
+    pub fn from(points: Vec<Point>) -> RopeSimulation {
+        let mut visited_tail_positions: HashSet<Point> = HashSet::new();
+        visited_tail_positions.insert(points.last().unwrap().clone());
 
         RopeSimulation {
-            head_pos: origin,
-            tail_pos: origin,
+            points,
+            visited_tail_positions,
+        }
+    }
+
+    pub fn new(num_points: usize) -> RopeSimulation {
+        let origin = Point::new(0, 0);
+        let mut visited_tail_positions = HashSet::new();
+        visited_tail_positions.insert(origin.clone());
+
+        let mut points = vec![];
+
+        for _ in 0..num_points {
+            points.push(origin.clone());
+        }
+
+        RopeSimulation {
+            points,
             visited_tail_positions,
         }
     }
@@ -95,23 +109,33 @@ impl RopeSimulation {
     pub fn apply_commands(&mut self, commands: &[Command]) {
         for command in commands.iter() {
             self.apply_command(command);
-            self.visited_tail_positions.insert(self.tail_pos);
+            self.visited_tail_positions
+                .insert(self.points.last().unwrap().clone());
         }
     }
 
     fn apply_command(&mut self, command: &Command) {
         match command {
-            Command::Up => self.head_pos.y += 1,
-            Command::Down => self.head_pos.y -= 1,
-            Command::Left => self.head_pos.x -= 1,
-            Command::Right => self.head_pos.x += 1,
+            Command::Up => self.points[0].y += 1,
+            Command::Down => self.points[0].y -= 1,
+            Command::Left => self.points[0].x -= 1,
+            Command::Right => self.points[0].x += 1,
         };
 
-        self.update_tail_pos();
+        let indices = &(0..self.points.len()).collect::<Vec<usize>>();
+
+        for i in indices.windows(2) {
+            let prev = i[0];
+            let next = i[1];
+            self.update_tail_pos(prev, next);
+        }
     }
 
-    fn update_tail_pos(&mut self) {
-        let diff = self.head_pos - self.tail_pos;
+    fn update_tail_pos(&mut self, prev: usize, next: usize) {
+        let prev = &self.points[prev].clone();
+        let next = &mut self.points[next];
+
+        let diff = prev.clone() - next.clone();
 
         let (x_diff, y_diff) = (diff.x, diff.y);
 
@@ -120,24 +144,18 @@ impl RopeSimulation {
             (0, 0) => (),
             // Directly above or below
             (0, y_diff) if y_diff.abs() == 2 => {
-                self.tail_pos.y += y_diff.signum();
+                next.y += y_diff.signum();
             }
             // Directly left or right
             (x_diff, 0) if x_diff.abs() == 2 => {
-                self.tail_pos.x += x_diff.signum();
+                next.x += x_diff.signum();
             }
             (x_diff, y_diff) if x_diff.abs() > 1 || y_diff.abs() > 1 => {
-                self.tail_pos.y += y_diff.signum();
-                self.tail_pos.x += x_diff.signum();
+                next.y += y_diff.signum();
+                next.x += x_diff.signum();
             }
             _ => (),
         }
-    }
-}
-
-impl Default for RopeSimulation {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -148,46 +166,40 @@ mod tests {
 
     #[test]
     fn right_4() {
-        let mut sim = RopeSimulation::new();
+        let mut sim = RopeSimulation::new(2);
         let commands = vec![Command::Right; 4];
 
         sim.apply_commands(&commands);
 
-        assert_eq!(sim.head_pos, Point::new(4, 0));
-        assert_eq!(sim.tail_pos, Point::new(3, 0));
+        assert_eq!(sim.points.first().unwrap(), &Point::new(4, 0));
+        assert_eq!(sim.points.last().unwrap(), &Point::new(3, 0));
     }
 
     #[test]
     fn diagonal_example_up() {
-        let mut sim = RopeSimulation::new();
-        sim.head_pos = Point::new(2, 2);
-        sim.tail_pos = Point::new(1, 1);
+        let mut sim = RopeSimulation::from(vec![Point::new(2, 2), Point::new(1, 1)]);
         sim.apply_command(&Command::Up);
 
-        assert_eq!(sim.head_pos, Point::new(2, 3));
-        assert_eq!(sim.tail_pos, Point::new(2, 2));
+        assert_eq!(sim.points.first().unwrap(), &Point::new(2, 3));
+        assert_eq!(sim.points.last().unwrap(), &Point::new(2, 2));
     }
 
     #[test]
     fn diagonal_example_right() {
-        let mut sim = RopeSimulation::new();
-        sim.head_pos = Point::new(2, 2);
-        sim.tail_pos = Point::new(1, 1);
+        let mut sim = RopeSimulation::from(vec![Point::new(2, 2), Point::new(1, 1)]);
         sim.apply_command(&Command::Right);
 
-        assert_eq!(sim.head_pos, Point::new(3, 2));
-        assert_eq!(sim.tail_pos, Point::new(2, 2));
+        assert_eq!(sim.points.first().unwrap(), &Point::new(3, 2));
+        assert_eq!(sim.points.last().unwrap(), &Point::new(2, 2));
     }
 
     #[test]
     fn tail_doesnt_move() {
-        let mut sim = RopeSimulation::new();
-        sim.head_pos = Point::new(4, 0);
-        sim.tail_pos = Point::new(3, 0);
+        let mut sim = RopeSimulation::from(vec![Point::new(4, 0), Point::new(3, 0)]);
         sim.apply_command(&Command::Up);
 
-        assert_eq!(sim.head_pos, Point::new(4, 1));
-        assert_eq!(sim.tail_pos, Point::new(3, 0));
+        assert_eq!(sim.points.first().unwrap(), &Point::new(4, 1));
+        assert_eq!(sim.points.last().unwrap(), &Point::new(3, 0));
     }
 
     #[test]
@@ -195,13 +207,13 @@ mod tests {
         let input =
             fs::read_to_string("test_input.txt").expect("Should have been able to read the file");
 
-        let mut sim = RopeSimulation::new();
+        let mut sim = RopeSimulation::new(2);
         let commands = parse_input(&input);
 
         sim.apply_commands(&commands);
 
-        assert_eq!(sim.head_pos, Point::new(2, 2));
-        assert_eq!(sim.tail_pos, Point::new(1, 2));
+        assert_eq!(sim.points.first().unwrap(), &Point::new(2, 2));
+        assert_eq!(sim.points.last().unwrap(), &Point::new(1, 2));
 
         let expected_visited_positions = [
             Point::new(0, 0),
