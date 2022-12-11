@@ -3,16 +3,10 @@ use std::{cmp::Reverse, collections::HashMap};
 use regex::Regex;
 
 pub struct Monkey {
-    items: Vec<Expr>,
+    items: Vec<i128>,
     operation: OperationFunction,
     test: TestFunction,
     num_inspections: u128,
-}
-
-impl Monkey {
-    fn evaluate_items(&self) -> Vec<i128> {
-        self.items.iter().map(|i| i.evaluate()).collect()
-    }
 }
 
 enum OperationFunction {
@@ -22,36 +16,11 @@ enum OperationFunction {
 }
 
 impl OperationFunction {
-    fn apply(&self, old: Expr) -> Expr {
+    fn apply(&self, old: i128) -> i128 {
         match self {
-            OperationFunction::Add(val) => Expr::Add(Box::new(old), Box::new(Expr::Val(*val))),
-            OperationFunction::MulBy(val) => Expr::Mul(Box::new(old), Box::new(Expr::Val(*val))),
-            OperationFunction::Square => Expr::Mul(Box::new(old.clone()), Box::new(old)),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub enum Expr {
-    Add(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Val(i128),
-}
-
-impl Expr {
-    fn modulo(&self, divisor: i128) -> i128 {
-        match self {
-            Expr::Add(a, b) => (a.modulo(divisor) + b.modulo(divisor)) % divisor,
-            Expr::Mul(a, b) => (a.modulo(divisor) * b.modulo(divisor)) % divisor,
-            Expr::Val(v) => v % divisor,
-        }
-    }
-
-    fn evaluate(&self) -> i128 {
-        match self {
-            Expr::Add(a, b) => a.evaluate() + b.evaluate(),
-            Expr::Mul(a, b) => a.evaluate() * b.evaluate(),
-            Expr::Val(v) => *v,
+            OperationFunction::Add(val) => old + val,
+            OperationFunction::MulBy(val) => old * val,
+            OperationFunction::Square => old * old,
         }
     }
 }
@@ -60,6 +29,16 @@ struct TestFunction {
     divisor: i128,
     true_branch_idx: usize,
     false_branch_idx: usize,
+}
+
+impl TestFunction {
+    fn apply(&self, item: i128) -> usize {
+        if item % self.divisor == 0 {
+            self.true_branch_idx
+        } else {
+            self.false_branch_idx
+        }
+    }
 }
 
 pub fn parse_input(input: &str) -> Vec<Monkey> {
@@ -76,7 +55,7 @@ pub fn parse_input(input: &str) -> Vec<Monkey> {
         .map(|group| {
             let items: Vec<_> = starting_items_re
                 .find_iter(group[1])
-                .map(|mat| Expr::Val(mat.as_str().parse::<i128>().unwrap()))
+                .map(|mat| mat.as_str().parse::<i128>().unwrap())
                 .collect();
 
             let operation_re_caps = operation_re.captures(group[2]).unwrap();
@@ -138,28 +117,8 @@ fn get_operation_function(operator: &str, operand: &str) -> OperationFunction {
     }
 }
 
-pub trait Strategy {
-    fn calculate_new_item(&self, monkey: &Monkey, item: Expr) -> Expr;
-}
-
-pub struct Part1Strategy;
-
-impl Strategy for Part1Strategy {
-    fn calculate_new_item(&self, monkey: &Monkey, item: Expr) -> Expr {
-        Expr::Val(monkey.operation.apply(item).evaluate() / 3)
-    }
-}
-
-pub struct Part2Strategy;
-
-impl Strategy for Part2Strategy {
-    fn calculate_new_item(&self, monkey: &Monkey, item: Expr) -> Expr {
-        monkey.operation.apply(item)
-    }
-}
-
-pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize, strategy: impl Strategy) {
-    let mut items_to_pass: HashMap<usize, Vec<Expr>> = HashMap::new();
+pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize) {
+    let mut items_to_pass: HashMap<usize, Vec<i128>> = HashMap::new();
 
     for _ in 0..num_rounds {
         for (idx, monkey) in monkeys.iter_mut().enumerate() {
@@ -168,17 +127,13 @@ pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize, strategy: i
             }
 
             for item in monkey.items.iter() {
-                let new_item = strategy.calculate_new_item(monkey, item.clone());
+                let new_item = monkey.operation.apply(*item) / 3;
 
-                let new_monkey_idx = if new_item.modulo(monkey.test.divisor) == 0 {
-                    monkey.test.true_branch_idx
-                } else {
-                    monkey.test.false_branch_idx
-                };
+                let new_monkey_idx = monkey.test.apply(new_item);
 
                 items_to_pass
                     .entry(new_monkey_idx)
-                    .and_modify(|v| v.push(new_item.clone()))
+                    .and_modify(|v| v.push(new_item))
                     .or_insert_with(|| vec![new_item]);
             }
 
@@ -203,35 +158,24 @@ mod tests {
     use std::fs;
 
     use super::*;
-
     #[test]
     fn example() {
         let input = fs::read_to_string("test_input.txt").unwrap();
         let mut monkeys = parse_input(&input);
-        process_monkeys(&mut monkeys, 20, Part1Strategy);
+        process_monkeys(&mut monkeys, 20);
 
-        assert_eq!(monkeys[0].evaluate_items(), vec![10, 12, 14, 26, 34]);
+        assert_eq!(monkeys[0].items, vec![10, 12, 14, 26, 34]);
         assert_eq!(monkeys[0].num_inspections, 101);
 
-        assert_eq!(monkeys[1].evaluate_items(), vec![245, 93, 53, 199, 115]);
+        assert_eq!(monkeys[1].items, vec![245, 93, 53, 199, 115]);
         assert_eq!(monkeys[1].num_inspections, 95);
 
-        assert_eq!(monkeys[2].evaluate_items(), vec![]);
+        assert_eq!(monkeys[2].items, vec![]);
         assert_eq!(monkeys[2].num_inspections, 7);
 
-        assert_eq!(monkeys[3].evaluate_items(), vec![]);
+        assert_eq!(monkeys[3].items, vec![]);
         assert_eq!(monkeys[3].num_inspections, 105);
 
         assert_eq!(calculate_monkey_business(&monkeys), 10605);
-    }
-
-    #[test]
-    #[ignore]
-    fn example_part_2() {
-        let input = fs::read_to_string("test_input.txt").unwrap();
-        let mut monkeys = parse_input(&input);
-        process_monkeys(&mut monkeys, 10000, Part2Strategy);
-
-        assert_eq!(calculate_monkey_business(&monkeys), 2713310158);
     }
 }
