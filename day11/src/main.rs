@@ -1,11 +1,11 @@
 use std::fs;
 
-use day11::{calculate_monkey_business, parse_input, process_monkeys};
+use day11::{calculate_monkey_business, parse_input, process_monkeys, Part1Strategy};
 
 fn main() {
     let input = fs::read_to_string("input.txt").unwrap();
     let mut monkeys = parse_input(&input);
-    process_monkeys(&mut monkeys, 20);
+    process_monkeys(&mut monkeys, 20, Part1Strategy);
 
     let monkey_business = calculate_monkey_business(&monkeys);
 
