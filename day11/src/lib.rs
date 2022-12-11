@@ -117,7 +117,39 @@ fn get_operation_function(operator: &str, operand: &str) -> OperationFunction {
     }
 }
 
-pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize) {
+pub trait Strategy {
+    fn calculate_new_item(&self, monkey: &Monkey, item: i128, lcm: i128) -> i128;
+    fn name(&self) -> String;
+}
+
+#[derive(Clone, Copy)]
+pub struct Part1Strategy;
+
+impl Strategy for Part1Strategy {
+    fn calculate_new_item(&self, monkey: &Monkey, item: i128, _lcm: i128) -> i128 {
+        monkey.operation.apply(item) / 3
+    }
+
+    fn name(&self) -> String {
+        String::from("Part 1 Strategy")
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Part2Strategy;
+
+impl Strategy for Part2Strategy {
+    fn calculate_new_item(&self, monkey: &Monkey, item: i128, lcm: i128) -> i128 {
+        monkey.operation.apply(item) % lcm
+    }
+
+    fn name(&self) -> String {
+        String::from("Part 2 Strategy")
+    }
+}
+
+pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize, strategy: impl Strategy) {
+    let lcm: i128 = monkeys.iter().map(|m| m.test.divisor).product();
     let mut items_to_pass: HashMap<usize, Vec<i128>> = HashMap::new();
 
     for _ in 0..num_rounds {
@@ -127,7 +159,7 @@ pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize) {
             }
 
             for item in monkey.items.iter() {
-                let new_item = monkey.operation.apply(*item) / 3;
+                let new_item = strategy.calculate_new_item(monkey, *item, lcm);
 
                 let new_monkey_idx = monkey.test.apply(new_item);
 
@@ -159,10 +191,10 @@ mod tests {
 
     use super::*;
     #[test]
-    fn example() {
+    fn example_part_1() {
         let input = fs::read_to_string("test_input.txt").unwrap();
         let mut monkeys = parse_input(&input);
-        process_monkeys(&mut monkeys, 20);
+        process_monkeys(&mut monkeys, 20, Part1Strategy);
 
         assert_eq!(monkeys[0].items, vec![10, 12, 14, 26, 34]);
         assert_eq!(monkeys[0].num_inspections, 101);
@@ -177,5 +209,14 @@ mod tests {
         assert_eq!(monkeys[3].num_inspections, 105);
 
         assert_eq!(calculate_monkey_business(&monkeys), 10605);
+    }
+
+    #[test]
+    fn example_part_2() {
+        let input = fs::read_to_string("test_input.txt").unwrap();
+        let mut monkeys = parse_input(&input);
+        process_monkeys(&mut monkeys, 10000, Part2Strategy);
+
+        assert_eq!(calculate_monkey_business(&monkeys), 2713310158);
     }
 }
