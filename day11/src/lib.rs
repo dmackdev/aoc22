@@ -4,9 +4,41 @@ use regex::Regex;
 
 pub struct Monkey {
     items: Vec<i128>,
-    operation: Box<dyn Fn(i128) -> i128>,
-    test: Box<dyn Fn(i128) -> usize>,
+    operation: OperationFunction,
+    test: TestFunction,
     num_inspections: u128,
+}
+
+enum OperationFunction {
+    Add(i128),
+    MulBy(i128),
+    Square,
+}
+
+impl OperationFunction {
+    fn apply(&self, old: i128) -> i128 {
+        match self {
+            OperationFunction::Add(val) => old + val,
+            OperationFunction::MulBy(val) => old * val,
+            OperationFunction::Square => old * old,
+        }
+    }
+}
+
+struct TestFunction {
+    divisor: i128,
+    true_branch_idx: usize,
+    false_branch_idx: usize,
+}
+
+impl TestFunction {
+    fn apply(&self, item: i128) -> usize {
+        if item % self.divisor == 0 {
+            self.true_branch_idx
+        } else {
+            self.false_branch_idx
+        }
+    }
 }
 
 pub fn parse_input(input: &str) -> Vec<Monkey> {
@@ -60,7 +92,11 @@ pub fn parse_input(input: &str) -> Vec<Monkey> {
                 .parse::<usize>()
                 .unwrap();
 
-            let test = get_monkey_test_function(divisor, true_branch_idx, false_branch_idx);
+            let test = TestFunction {
+                divisor,
+                true_branch_idx,
+                false_branch_idx,
+            };
 
             Monkey {
                 items,
@@ -72,35 +108,13 @@ pub fn parse_input(input: &str) -> Vec<Monkey> {
         .collect()
 }
 
-fn get_operation_function(operator: &str, operand: &str) -> Box<dyn Fn(i128) -> i128> {
-    let operator = if operator == "*" {
-        |x: i128, y: i128| x * y
-    } else {
-        |x: i128, y: i128| x + y
-    };
-
-    if operand == "old" {
-        Box::new(move |old: i128| operator(old, old))
-    } else {
-        let operand = operand.parse::<i128>().unwrap();
-        Box::new(move |old: i128| operator(old, operand))
+fn get_operation_function(operator: &str, operand: &str) -> OperationFunction {
+    match [operator, operand] {
+        ["*", "old"] => OperationFunction::Square,
+        ["*", val] => OperationFunction::MulBy(val.parse::<i128>().unwrap()),
+        ["+", val] => OperationFunction::Add(val.parse::<i128>().unwrap()),
+        _ => panic!(),
     }
-}
-
-fn get_monkey_test_function(
-    divisor: i128,
-    true_branch_idx: usize,
-    false_branch_idx: usize,
-) -> Box<dyn Fn(i128) -> usize> {
-    let f = move |new: i128| {
-        if new % divisor == 0 {
-            true_branch_idx
-        } else {
-            false_branch_idx
-        }
-    };
-
-    Box::new(f)
 }
 
 pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize) {
@@ -113,11 +127,9 @@ pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize) {
             }
 
             for item in monkey.items.iter() {
-                let monkey_op = monkey.operation.as_ref();
-                let new_item = monkey_op(*item) / 3;
+                let new_item = monkey.operation.apply(*item) / 3;
 
-                let monkey_test = monkey.test.as_ref();
-                let new_monkey_idx = monkey_test(new_item);
+                let new_monkey_idx = monkey.test.apply(new_item);
 
                 items_to_pass
                     .entry(new_monkey_idx)
