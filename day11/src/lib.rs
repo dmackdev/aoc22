@@ -1,9 +1,9 @@
-use std::{cmp::Reverse, collections::HashMap};
+use std::{cmp::Reverse, collections::HashMap, rc::Rc};
 
 use regex::Regex;
 
 pub struct Monkey {
-    items: Vec<Expr>,
+    items: Vec<Rc<Expr>>,
     operation: OperationFunction,
     test: TestFunction,
     num_inspections: u128,
@@ -22,29 +22,48 @@ enum OperationFunction {
 }
 
 impl OperationFunction {
-    fn apply(&self, old: Expr) -> Expr {
+    fn apply(&self, old: Rc<Expr>) -> Expr {
         match self {
-            OperationFunction::Add(val) => Expr::Add(Box::new(old), Box::new(Expr::Val(*val))),
-            OperationFunction::MulBy(val) => Expr::Mul(Box::new(old), Box::new(Expr::Val(*val))),
-            OperationFunction::Square => Expr::Mul(Box::new(old.clone()), Box::new(old)),
+            OperationFunction::Add(val) => Expr::Add(old, Rc::new(Expr::Val(*val))),
+            OperationFunction::MulBy(val) => Expr::Mul(old, Rc::new(Expr::Val(*val))),
+            OperationFunction::Square => Expr::Mul(old.clone(), old),
         }
     }
 }
 
-#[derive(Clone)]
 pub enum Expr {
-    Add(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
+    Add(Rc<Expr>, Rc<Expr>),
+    Mul(Rc<Expr>, Rc<Expr>),
     Val(i128),
 }
 
-impl Expr {
-    fn modulo(&self, divisor: i128) -> i128 {
+impl ToString for Expr {
+    fn to_string(&self) -> String {
         match self {
-            Expr::Add(a, b) => (a.modulo(divisor) + b.modulo(divisor)) % divisor,
-            Expr::Mul(a, b) => (a.modulo(divisor) * b.modulo(divisor)) % divisor,
-            Expr::Val(v) => v % divisor,
+            Expr::Add(a, b) => format!("Add({},{})", a.to_string(), b.to_string()),
+            Expr::Mul(a, b) => format!("Mul({},{})", a.to_string(), b.to_string()),
+            Expr::Val(v) => format!("{}", v),
         }
+    }
+}
+
+impl Expr {
+    fn modulo(&self, divisor: i128, cache: &mut HashMap<String, i128>) -> i128 {
+        let key = self.to_string() + &divisor.to_string();
+
+        if let Some(res) = cache.get(&key) {
+            return *res;
+        }
+
+        let res = match self {
+            Expr::Add(a, b) => (a.modulo(divisor, cache) + b.modulo(divisor, cache)) % divisor,
+            Expr::Mul(a, b) => (a.modulo(divisor, cache) * b.modulo(divisor, cache)) % divisor,
+            Expr::Val(v) => v % divisor,
+        };
+
+        cache.insert(key, res);
+
+        res
     }
 
     fn evaluate(&self) -> i128 {
@@ -76,7 +95,7 @@ pub fn parse_input(input: &str) -> Vec<Monkey> {
         .map(|group| {
             let items: Vec<_> = starting_items_re
                 .find_iter(group[1])
-                .map(|mat| Expr::Val(mat.as_str().parse::<i128>().unwrap()))
+                .map(|mat| Rc::new(Expr::Val(mat.as_str().parse::<i128>().unwrap())))
                 .collect();
 
             let operation_re_caps = operation_re.captures(group[2]).unwrap();
@@ -139,13 +158,13 @@ fn get_operation_function(operator: &str, operand: &str) -> OperationFunction {
 }
 
 pub trait Strategy {
-    fn calculate_new_item(&self, monkey: &Monkey, item: Expr) -> Expr;
+    fn calculate_new_item(&self, monkey: &Monkey, item: Rc<Expr>) -> Expr;
 }
 
 pub struct Part1Strategy;
 
 impl Strategy for Part1Strategy {
-    fn calculate_new_item(&self, monkey: &Monkey, item: Expr) -> Expr {
+    fn calculate_new_item(&self, monkey: &Monkey, item: Rc<Expr>) -> Expr {
         Expr::Val(monkey.operation.apply(item).evaluate() / 3)
     }
 }
@@ -153,13 +172,14 @@ impl Strategy for Part1Strategy {
 pub struct Part2Strategy;
 
 impl Strategy for Part2Strategy {
-    fn calculate_new_item(&self, monkey: &Monkey, item: Expr) -> Expr {
+    fn calculate_new_item(&self, monkey: &Monkey, item: Rc<Expr>) -> Expr {
         monkey.operation.apply(item)
     }
 }
 
 pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize, strategy: impl Strategy) {
-    let mut items_to_pass: HashMap<usize, Vec<Expr>> = HashMap::new();
+    let mut cache = HashMap::new();
+    let mut items_to_pass: HashMap<usize, Vec<Rc<Expr>>> = HashMap::new();
 
     for _ in 0..num_rounds {
         for (idx, monkey) in monkeys.iter_mut().enumerate() {
@@ -168,9 +188,9 @@ pub fn process_monkeys(monkeys: &mut Vec<Monkey>, num_rounds: usize, strategy: i
             }
 
             for item in monkey.items.iter() {
-                let new_item = strategy.calculate_new_item(monkey, item.clone());
+                let new_item = Rc::new(strategy.calculate_new_item(monkey, item.clone()));
 
-                let new_monkey_idx = if new_item.modulo(monkey.test.divisor) == 0 {
+                let new_monkey_idx = if new_item.modulo(monkey.test.divisor, &mut cache) == 0 {
                     monkey.test.true_branch_idx
                 } else {
                     monkey.test.false_branch_idx
