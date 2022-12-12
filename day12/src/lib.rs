@@ -19,6 +19,7 @@ struct GridInit {
     cols: Option<usize>,
     start_pos: Option<Pos>,
     end_pos: Option<Pos>,
+    lowest_positions: Vec<Pos>,
 }
 
 impl GridInit {
@@ -28,16 +29,18 @@ impl GridInit {
             cols: None,
             start_pos: None,
             end_pos: None,
+            lowest_positions: Vec::new(),
         }
     }
 }
 
-impl From<GridInit> for (Grid<u32>, Pos, Pos) {
+impl From<GridInit> for (Grid<u32>, Pos, Pos, Vec<Pos>) {
     fn from(val: GridInit) -> Self {
         (
             Grid::from_vec(val.grid_vec, val.cols.unwrap()),
             val.start_pos.unwrap(),
             val.end_pos.unwrap(),
+            val.lowest_positions,
         )
     }
 }
@@ -46,6 +49,11 @@ pub trait EnhancedGrid<T> {
     fn get_neighbours(&self, pos: Pos) -> Vec<Pos>;
     fn get_from_pos(&self, pos: Pos) -> T;
     fn calculate_shortest_path(&self, start_pos: Pos, end_pos: Pos) -> Option<(Vec<Pos>, i32)>;
+    fn find_shortest_path(
+        &self,
+        start_positions: Vec<Pos>,
+        end_pos: Pos,
+    ) -> Option<(Vec<Pos>, i32)>;
 }
 
 impl EnhancedGrid<u32> for Grid<u32> {
@@ -88,9 +96,20 @@ impl EnhancedGrid<u32> for Grid<u32> {
             |&p| p == end_pos,
         )
     }
+
+    fn find_shortest_path(
+        &self,
+        start_positions: Vec<Pos>,
+        end_pos: Pos,
+    ) -> Option<(Vec<Pos>, i32)> {
+        start_positions
+            .iter()
+            .filter_map(|start_pos| self.calculate_shortest_path(*start_pos, end_pos))
+            .min_by_key(|(_, cost)| *cost)
+    }
 }
 
-pub fn parse_input(input: &str) -> (Grid<u32>, Pos, Pos) {
+pub fn parse_input(input: &str) -> (Grid<u32>, Pos, Pos, Vec<Pos>) {
     input
         .lines()
         .enumerate()
@@ -102,11 +121,17 @@ pub fn parse_input(input: &str) -> (Grid<u32>, Pos, Pos) {
                         match c {
                             'S' => {
                                 acc.0.push(to_height('a'));
-                                acc.1 = Some(Pos::new(row, col));
+                                let pos = Pos::new(row, col);
+                                acc.1 = Some(pos);
+                                grid_init.lowest_positions.push(pos);
                             }
                             'E' => {
                                 acc.0.push(to_height('z'));
                                 acc.2 = Some(Pos::new(row, col));
+                            }
+                            'a' => {
+                                acc.0.push(to_height(c));
+                                grid_init.lowest_positions.push(Pos::new(row, col));
                             }
                             _ => acc.0.push(to_height(c)),
                         };
@@ -152,11 +177,28 @@ mod tests {
 
     #[test]
     fn example() {
-        let (grid, start_pos, end_pos) =
+        let (grid, start_pos, end_pos, lowest_positions) =
             parse_input(&fs::read_to_string("test_input.txt").unwrap());
+
+        assert_eq!(
+            lowest_positions,
+            vec![
+                Pos::new(0, 0),
+                Pos::new(0, 1),
+                Pos::new(1, 0),
+                Pos::new(2, 0),
+                Pos::new(3, 0),
+                Pos::new(4, 0)
+            ]
+        );
 
         let (_, cost) = grid.calculate_shortest_path(start_pos, end_pos).unwrap();
 
         assert_eq!(cost, 31);
+
+        let (_, shortest_path_cost_from_lowest_positions) =
+            grid.find_shortest_path(lowest_positions, end_pos).unwrap();
+
+        assert_eq!(shortest_path_cost_from_lowest_positions, 29);
     }
 }
