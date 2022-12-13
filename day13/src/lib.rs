@@ -49,7 +49,7 @@ pub fn get_decoder_key(mut packets: Vec<Packet>, divider_packets: Vec<Packet>) -
 fn insert_packet_sorted(sorted_packets: &mut Vec<Packet>, packet: Packet) -> usize {
     let insertion_idx = sorted_packets
         .iter()
-        .position(|other| matches!(packet.cmp(other), Ordering::Less))
+        .position(|other| packet.cmp(other) == Ordering::Less)
         .unwrap();
 
     sorted_packets.insert(insertion_idx, packet);
