@@ -1,12 +1,12 @@
 use std::{cmp::Ordering, num::ParseIntError, str::FromStr};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum PacketData {
     List(Vec<PacketData>),
     Val(i8),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Packet {
     data: Vec<PacketData>,
 }
@@ -38,7 +38,7 @@ pub fn sum_indices_of_ordered_packet_pairs(packets: &[Packet]) -> usize {
 }
 
 pub fn get_decoder_key(mut packets: Vec<Packet>, divider_packets: Vec<Packet>) -> usize {
-    packets.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    packets.sort();
 
     divider_packets
         .into_iter()
@@ -49,7 +49,7 @@ pub fn get_decoder_key(mut packets: Vec<Packet>, divider_packets: Vec<Packet>) -
 fn insert_packet_sorted(sorted_packets: &mut Vec<Packet>, packet: Packet) -> usize {
     let insertion_idx = sorted_packets
         .iter()
-        .position(|other| matches!(packet.partial_cmp(other), Some(Ordering::Less)))
+        .position(|other| matches!(packet.cmp(other), Ordering::Less))
         .unwrap();
 
     sorted_packets.insert(insertion_idx, packet);
@@ -104,42 +104,54 @@ pub fn split_tokens(line: &str) -> Vec<String> {
         .collect()
 }
 
+impl Ord for Packet {
+    fn cmp(&self, other: &Self) -> Ordering {
+        PacketData::List(self.data.clone()).cmp(&PacketData::List(other.data.clone()))
+    }
+}
+
 impl PartialOrd for Packet {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        PacketData::List(self.data.clone()).partial_cmp(&PacketData::List(other.data.clone()))
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PacketData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (PacketData::List(list_a), PacketData::List(list_b)) => {
+                if list_a.is_empty() && !list_b.is_empty() {
+                    return Ordering::Less;
+                }
+
+                if !list_a.is_empty() && list_b.is_empty() {
+                    return Ordering::Greater;
+                }
+
+                if list_a.is_empty() && list_b.is_empty() {
+                    return Ordering::Equal;
+                }
+
+                match list_a[0].cmp(&list_b[0]) {
+                    Ordering::Equal => PacketData::List(list_a[1..].to_vec())
+                        .cmp(&PacketData::List(list_b[1..].to_vec())),
+                    ordering => ordering,
+                }
+            }
+            (PacketData::List(_), PacketData::Val(_)) => {
+                self.cmp(&PacketData::List(vec![other.clone()]))
+            }
+            (PacketData::Val(_), PacketData::List(_)) => {
+                PacketData::List(vec![self.clone()]).cmp(other)
+            }
+            (PacketData::Val(a), PacketData::Val(b)) => a.cmp(b),
+        }
     }
 }
 
 impl PartialOrd for PacketData {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (PacketData::List(list_a), PacketData::List(list_b)) => {
-                if list_a.is_empty() && !list_b.is_empty() {
-                    return Some(Ordering::Less);
-                }
-
-                if !list_a.is_empty() && list_b.is_empty() {
-                    return Some(Ordering::Greater);
-                }
-
-                if list_a.is_empty() && list_b.is_empty() {
-                    return Some(Ordering::Equal);
-                }
-
-                match list_a[0].partial_cmp(&list_b[0]) {
-                    Some(Ordering::Equal) => PacketData::List(list_a[1..].to_vec())
-                        .partial_cmp(&PacketData::List(list_b[1..].to_vec())),
-                    ordering => ordering,
-                }
-            }
-            (PacketData::List(_), PacketData::Val(_)) => {
-                self.partial_cmp(&PacketData::List(vec![other.clone()]))
-            }
-            (PacketData::Val(_), PacketData::List(_)) => {
-                PacketData::List(vec![self.clone()]).partial_cmp(other)
-            }
-            (PacketData::Val(a), PacketData::Val(b)) => Some(a.cmp(b)),
-        }
+        Some(self.cmp(other))
     }
 }
 
