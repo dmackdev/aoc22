@@ -1,8 +1,12 @@
-use day13::{split_tokens, Packet};
+use std::fs;
+
+use day13::parse_input;
 
 fn main() {
-    let input = "[1,[2,[3,[4,[5,6,7]]]],8,9]";
-    println!("{:?}", input);
-    println!("{:?}", split_tokens(input));
-    println!("{:?}", input.parse::<Packet>());
+    let result = parse_input(&fs::read_to_string("input.txt").unwrap());
+
+    println!(
+        "The sum of the indices of the packets pairs in the correct order is: {}",
+        result
+    );
 }

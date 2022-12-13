@@ -1,30 +1,29 @@
-use std::{num::ParseIntError, str::FromStr};
+use std::{cmp::Ordering, num::ParseIntError, str::FromStr};
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 enum PacketData {
     List(Vec<PacketData>),
     Val(i8),
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq)]
 pub struct Packet {
     data: Vec<PacketData>,
 }
 
-fn parse_input(input: &str) -> Vec<(Packet, Packet)> {
+pub fn parse_input(input: &str) -> usize {
     input
         .lines()
         .collect::<Vec<_>>()
         .chunks(3)
-        .filter_map(|chunk| {
-            let (packet_1, packet_2) = normalise(
-                chunk[0].parse::<Packet>().unwrap(),
-                chunk[1].parse::<Packet>().unwrap(),
-            );
+        .enumerate()
+        .filter_map(|(idx, chunk)| {
+            let packet_1 = chunk[0].parse::<Packet>().unwrap();
+            let packet_2 = chunk[1].parse::<Packet>().unwrap();
 
-            (packet_1 < packet_2).then_some((packet_1, packet_2))
+            (packet_1 < packet_2).then_some(idx + 1)
         })
-        .collect()
+        .sum()
 }
 
 impl FromStr for Packet {
@@ -39,26 +38,23 @@ impl FromStr for Packet {
 
         for token in tokens {
             match token.as_str() {
-                "[" => {
-                    let new_list = PacketData::List(vec![]);
-                    lists.push(new_list)
-                }
+                "[" => lists.push(PacketData::List(vec![])),
                 "]" => {
-                    if let Some(n) = lists.pop() {
-                        if let Some(PacketData::List(nested_list)) = lists.last_mut() {
-                            nested_list.push(n)
+                    if let Some(curent_list) = lists.pop() {
+                        if let Some(PacketData::List(parent_list)) = lists.last_mut() {
+                            parent_list.push(curent_list)
                         } else {
-                            packet.data.push(n)
+                            packet.data.push(curent_list)
                         }
                     }
                 }
                 "" => (),
                 num => {
-                    let val = PacketData::Val(num.parse().unwrap());
+                    let val = PacketData::Val(num.parse()?);
                     if lists.is_empty() {
                         packet.data.push(val)
-                    } else if let Some(PacketData::List(nested_list)) = lists.last_mut() {
-                        nested_list.push(val)
+                    } else if let Some(PacketData::List(current_list)) = lists.last_mut() {
+                        current_list.push(val)
                     }
                 }
             }
@@ -74,21 +70,52 @@ pub fn split_tokens(line: &str) -> Vec<String> {
         .replace(']', ",]")
         .split(',')
         .map(|s| s.to_string())
-        .collect::<Vec<_>>()
+        .collect()
 }
 
-// impl PartialOrd for PacketData {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         todo!()
-//     }
-// }
+impl PartialOrd for Packet {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        PacketData::List(self.data.clone()).partial_cmp(&PacketData::List(other.data.clone()))
+    }
+}
 
-fn normalise(a: Packet, b: Packet) -> (Packet, Packet) {
-    todo!()
+impl PartialOrd for PacketData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (PacketData::List(list_a), PacketData::List(list_b)) => {
+                if list_a.is_empty() && !list_b.is_empty() {
+                    return Some(Ordering::Less);
+                }
+
+                if !list_a.is_empty() && list_b.is_empty() {
+                    return Some(Ordering::Greater);
+                }
+
+                if list_a.is_empty() && list_b.is_empty() {
+                    return Some(Ordering::Equal);
+                }
+
+                match list_a[0].partial_cmp(&list_b[0]) {
+                    Some(Ordering::Equal) => PacketData::List(list_a[1..].to_vec())
+                        .partial_cmp(&PacketData::List(list_b[1..].to_vec())),
+                    ordering => ordering,
+                }
+            }
+            (PacketData::List(_), PacketData::Val(_)) => {
+                self.partial_cmp(&PacketData::List(vec![other.clone()]))
+            }
+            (PacketData::Val(_), PacketData::List(_)) => {
+                PacketData::List(vec![self.clone()]).partial_cmp(other)
+            }
+            (PacketData::Val(a), PacketData::Val(b)) => Some(a.cmp(b)),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
@@ -127,5 +154,12 @@ mod tests {
                 PacketData::Val(9)
             ]
         )
+    }
+
+    #[test]
+    fn example() {
+        let result = parse_input(&fs::read_to_string("test_input.txt").unwrap());
+
+        assert_eq!(result, 13)
     }
 }
