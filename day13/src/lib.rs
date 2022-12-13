@@ -11,19 +11,50 @@ pub struct Packet {
     data: Vec<PacketData>,
 }
 
-pub fn parse_input(input: &str) -> usize {
+pub fn parse_packets(input: &str) -> Vec<Packet> {
     input
         .lines()
         .collect::<Vec<_>>()
         .chunks(3)
-        .enumerate()
-        .filter_map(|(idx, chunk)| {
+        .flat_map(|chunk| {
             let packet_1 = chunk[0].parse::<Packet>().unwrap();
             let packet_2 = chunk[1].parse::<Packet>().unwrap();
+            [packet_1, packet_2]
+        })
+        .collect()
+}
+
+pub fn sum_indices_of_ordered_packet_pairs(packets: &[Packet]) -> usize {
+    packets
+        .chunks(2)
+        .enumerate()
+        .filter_map(|(idx, chunk)| {
+            let packet_1 = &chunk[0];
+            let packet_2 = &chunk[1];
 
             (packet_1 < packet_2).then_some(idx + 1)
         })
         .sum()
+}
+
+pub fn get_decoder_key(mut packets: Vec<Packet>, divider_packets: Vec<Packet>) -> usize {
+    packets.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    divider_packets
+        .into_iter()
+        .map(|divider_p| insert_packet_sorted(&mut packets, divider_p) + 1)
+        .product()
+}
+
+fn insert_packet_sorted(sorted_packets: &mut Vec<Packet>, packet: Packet) -> usize {
+    let insertion_idx = sorted_packets
+        .iter()
+        .position(|other| matches!(packet.partial_cmp(other), Some(Ordering::Less)))
+        .unwrap();
+
+    sorted_packets.insert(insertion_idx, packet);
+
+    insertion_idx
 }
 
 impl FromStr for Packet {
@@ -158,8 +189,15 @@ mod tests {
 
     #[test]
     fn example() {
-        let result = parse_input(&fs::read_to_string("test_input.txt").unwrap());
+        let packets = parse_packets(&fs::read_to_string("test_input.txt").unwrap());
+        let result = sum_indices_of_ordered_packet_pairs(&packets);
 
-        assert_eq!(result, 13)
+        assert_eq!(result, 13);
+
+        let divider_packets = vec!["[[2]]".parse().unwrap(), "[[6]]".parse().unwrap()];
+
+        let decoder_key = get_decoder_key(packets, divider_packets);
+
+        assert_eq!(decoder_key, 140);
     }
 }
