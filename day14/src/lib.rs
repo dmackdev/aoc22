@@ -93,6 +93,31 @@ impl GridInit {
         Self { grid, offset }
     }
 
+    pub fn new_with_floor(rock_paths: Vec<Vec<Pos>>, col_centre: i32) -> Self {
+        let (max_row, _, _) = get_pos_stats(&rock_paths);
+
+        let num_rows = max_row as usize + 1 + 2; // Extra 2 rows for floor
+
+        // Consider a sand pyramid with 1 particle on the top, and each row has 2 successive sand particles:
+        // We want a width that could contain this pyramid completely
+        let num_cols = ((num_rows + 1) * 2) - 1;
+
+        // Adjust the offset for the centre
+        let offset = -col_centre + num_cols as i32 / 2;
+
+        let mut grid = Grid::init(num_rows, num_cols, Tile::Air);
+
+        grid.init_from_paths(rock_paths, offset);
+
+        // Add the floor
+        grid.fill_rock_path_row(
+            &Pos::new(num_rows as i32 - 1, 0),
+            &Pos::new(num_rows as i32 - 1, num_cols as i32 - 1),
+        );
+
+        Self { grid, offset }
+    }
+
     pub fn get_grid_display(&self) -> String {
         let mut display_string = String::new();
 
@@ -141,7 +166,10 @@ impl GridInit {
                     self.grid[pos.row as usize][pos.col as usize] = Tile::Sand;
                     count += 1;
                 }
-                None => return count,
+                None => {
+                    self.grid[pos.row as usize][pos.col as usize] = Tile::Sand;
+                    return count + 1;
+                }
             };
         }
     }
