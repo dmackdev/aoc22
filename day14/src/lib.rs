@@ -143,21 +143,21 @@ impl GridWrapper {
             let mut sand_path = SandPathIterator {
                 grid: &self.grid,
                 curr_pos: pos,
-                did_err: false,
+                fell_off_grid: false,
             };
 
             let mut last_pos = None;
 
-            while !sand_path.did_err {
+            while !sand_path.fell_off_grid {
                 let next = sand_path.next();
 
-                if sand_path.did_err {
+                if sand_path.fell_off_grid {
                     return count;
                 }
 
                 match next {
                     Some(pos) => last_pos = Some(pos),
-                    None => break,
+                    None => break, // End of the iterator
                 }
             }
 
@@ -167,6 +167,8 @@ impl GridWrapper {
                     count += 1;
                 }
                 None => {
+                    // The iterator was empty, so there was no next point after the initial one,
+                    // so we set the particle on the grid and return
                     self.grid[pos.row as usize][pos.col as usize] = Tile::Sand;
                     return count + 1;
                 }
@@ -241,7 +243,7 @@ impl EnhancedGrid for Grid<Tile> {
 struct SandPathIterator<'a> {
     grid: &'a Grid<Tile>,
     curr_pos: Pos,
-    did_err: bool,
+    fell_off_grid: bool,
 }
 
 impl<'a> Iterator for SandPathIterator<'a> {
@@ -251,7 +253,7 @@ impl<'a> Iterator for SandPathIterator<'a> {
         self.curr_pos = self.curr_pos + Pos::new(1, 0);
 
         if self.curr_pos.row >= self.grid.rows() as i32 {
-            self.did_err = true;
+            self.fell_off_grid = true;
             return None; // Fell off the grid to the bottom
         }
 
@@ -259,9 +261,9 @@ impl<'a> Iterator for SandPathIterator<'a> {
 
         match next_tile {
             Some(Tile::Air) => return Some(self.curr_pos),
-            Some(_) => (),
+            Some(_) => (), // Could fall to different position, so continue
             None => {
-                self.did_err = true;
+                self.fell_off_grid = true;
                 return None;
             } // Fell off the grid
         };
@@ -269,42 +271,42 @@ impl<'a> Iterator for SandPathIterator<'a> {
         self.curr_pos = self.curr_pos + Pos::new(0, -1);
 
         if self.curr_pos.col < 0 {
-            self.did_err = true;
-            return None;
             // Fell off the grid to the left
+            self.fell_off_grid = true;
+            return None;
         }
 
         next_tile = self.grid.get_from_pos(self.curr_pos);
 
         match next_tile {
             Some(Tile::Air) => return Some(self.curr_pos),
-            Some(_) => (),
+            Some(_) => (), // Could fall to different position, so continue
             None => {
-                self.did_err = true;
+                // Fell off the grid to the left
+                self.fell_off_grid = true;
                 return None;
-            } // Fell off the grid
+            }
         };
 
         self.curr_pos = self.curr_pos + Pos::new(0, 2);
 
         if self.curr_pos.col >= self.grid.cols() as i32 {
-            self.did_err = true;
-            return None; // Fell off the grid to the right
+            // Fell off the grid to the right
+            self.fell_off_grid = true;
+            return None;
         }
 
         next_tile = self.grid.get_from_pos(self.curr_pos);
 
         match next_tile {
-            Some(Tile::Air) => return Some(self.curr_pos),
-            Some(_) => (),
+            Some(Tile::Air) => Some(self.curr_pos),
+            Some(_) => None, // Tile is blocked in all three positions, end iteration
             None => {
-                self.did_err = true;
-                return None;
-            } // Fell off the grid
-        };
-
-        // Tile is blocked in all three positions, end iteration
-        None
+                // Fell off the grid to the right
+                self.fell_off_grid = true;
+                None
+            }
+        }
     }
 }
 
