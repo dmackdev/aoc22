@@ -28,10 +28,10 @@ pub struct Pos {
 }
 
 impl Pos {
-    fn normalise(&self, min_col: i32) -> Pos {
+    fn normalise(&self, offset: i32) -> Pos {
         Pos {
             row: self.row,
-            col: self.col - min_col,
+            col: self.col + offset,
         }
     }
 }
@@ -53,72 +53,44 @@ impl Pos {
     }
 }
 
+fn get_pos_stats(rock_paths: &[Vec<Pos>]) -> (i32, i32, i32) {
+    let flattened_paths = rock_paths.iter().flatten();
+    let max_row = flattened_paths
+        .clone()
+        .max_by_key(|pos| pos.row)
+        .unwrap()
+        .row;
+    let min_col = flattened_paths
+        .clone()
+        .min_by_key(|pos| pos.col)
+        .unwrap()
+        .col;
+    let max_col = flattened_paths.max_by_key(|pos| pos.col).unwrap().col;
+
+    (max_row, min_col, max_col)
+}
+
 #[derive(Debug)]
 pub struct GridInit {
-    rock_paths: Vec<Vec<Pos>>,
-    min_col: i32,
-    max_col: i32,
-    min_row: i32,
-    max_row: i32,
     grid: Grid<Tile>,
+    offset: i32,
 }
 
 impl GridInit {
-    fn new(
-        rock_paths: Vec<Vec<Pos>>,
-        min_col: i32,
-        max_col: i32,
-        min_row: i32,
-        max_row: i32,
-    ) -> Self {
+    pub fn new(rock_paths: Vec<Vec<Pos>>) -> Self {
+        let (max_row, min_col, max_col) = get_pos_stats(&rock_paths);
+
+        let offset = -min_col;
+
         let mut grid = Grid::init(
             max_row as usize + 1,
             (max_col - min_col) as usize + 1,
             Tile::Air,
         );
 
-        for path in rock_paths.iter() {
-            for pair in path.windows(2) {
-                match (pair[0], pair[1]) {
-                    (
-                        Pos {
-                            row: row_a,
-                            col: col_a,
-                        },
-                        Pos {
-                            row: row_b,
-                            col: col_b,
-                        },
-                    ) if row_a == row_b && col_a != col_b => grid.fill_rock_path_row(
-                        &pair[0].normalise(min_col),
-                        &pair[1].normalise(min_col),
-                    ),
-                    (
-                        Pos {
-                            row: row_a,
-                            col: col_a,
-                        },
-                        Pos {
-                            row: row_b,
-                            col: col_b,
-                        },
-                    ) if col_a == col_b && row_a != row_b => grid.fill_rock_path_col(
-                        &pair[0].normalise(min_col),
-                        &pair[1].normalise(min_col),
-                    ),
-                    _ => panic!(),
-                }
-            }
-        }
+        grid.init_from_paths(rock_paths, offset);
 
-        Self {
-            rock_paths,
-            min_col,
-            max_col,
-            min_row,
-            max_row,
-            grid,
-        }
+        Self { grid, offset }
     }
 
     pub fn get_grid_display(&self) -> String {
@@ -139,7 +111,7 @@ impl GridInit {
     }
 
     pub fn drop_sand(&mut self, pos: Pos) -> i32 {
-        let pos = pos.normalise(self.min_col);
+        let pos = pos.normalise(self.offset);
         let mut count = 0;
 
         loop {
@@ -176,6 +148,7 @@ impl GridInit {
 }
 
 trait EnhancedGrid {
+    fn init_from_paths(&mut self, rock_paths: Vec<Vec<Pos>>, offset: i32);
     fn fill_rock_path_row(&mut self, start: &Pos, end: &Pos);
     fn fill_rock_path_col(&mut self, start: &Pos, end: &Pos);
     fn get_from_pos(&self, pos: Pos) -> Option<&Tile>;
@@ -202,6 +175,38 @@ impl EnhancedGrid for Grid<Tile> {
 
     fn get_from_pos(&self, pos: Pos) -> Option<&Tile> {
         self.get(pos.row as usize, pos.col as usize)
+    }
+
+    fn init_from_paths(&mut self, rock_paths: Vec<Vec<Pos>>, offset: i32) {
+        for path in rock_paths.iter() {
+            for pair in path.windows(2) {
+                match (pair[0], pair[1]) {
+                    (
+                        Pos {
+                            row: row_a,
+                            col: col_a,
+                        },
+                        Pos {
+                            row: row_b,
+                            col: col_b,
+                        },
+                    ) if row_a == row_b && col_a != col_b => self
+                        .fill_rock_path_row(&pair[0].normalise(offset), &pair[1].normalise(offset)),
+                    (
+                        Pos {
+                            row: row_a,
+                            col: col_a,
+                        },
+                        Pos {
+                            row: row_b,
+                            col: col_b,
+                        },
+                    ) if col_a == col_b && row_a != row_b => self
+                        .fill_rock_path_col(&pair[0].normalise(offset), &pair[1].normalise(offset)),
+                    _ => panic!(),
+                }
+            }
+        }
     }
 }
 
@@ -275,7 +280,7 @@ impl<'a> Iterator for SandPathIterator<'a> {
     }
 }
 
-pub fn parse_input(input: &str) -> GridInit {
+pub fn parse_input(input: &str) -> Vec<Vec<Pos>> {
     let re = Regex::new(r"(?P<col>\d+),(?P<row>\d+)").unwrap();
 
     let mut rock_paths = vec![];
@@ -294,25 +299,7 @@ pub fn parse_input(input: &str) -> GridInit {
         rock_paths.push(new_rock_paths);
     }
 
-    let flattened_paths = rock_paths.iter().flatten();
-    let min_row = flattened_paths
-        .clone()
-        .min_by_key(|pos| pos.row)
-        .unwrap()
-        .row;
-    let max_row = flattened_paths
-        .clone()
-        .max_by_key(|pos| pos.row)
-        .unwrap()
-        .row;
-    let min_col = flattened_paths
-        .clone()
-        .min_by_key(|pos| pos.col)
-        .unwrap()
-        .col;
-    let max_col = flattened_paths.max_by_key(|pos| pos.col).unwrap().col;
-
-    GridInit::new(rock_paths, min_col, max_col, min_row, max_row)
+    rock_paths
 }
 
 #[cfg(test)]
@@ -323,7 +310,8 @@ mod tests {
 
     #[test]
     fn example() {
-        let mut grid_init = parse_input(&fs::read_to_string("test_input.txt").unwrap());
+        let rock_paths = parse_input(&fs::read_to_string("test_input.txt").unwrap());
+        let mut grid_init = GridInit::new(rock_paths);
         let count = grid_init.drop_sand(Pos::new(0, 500));
 
         assert_eq!(count, 24);
