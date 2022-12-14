@@ -71,12 +71,12 @@ fn get_pos_stats(rock_paths: &[Vec<Pos>]) -> (i32, i32, i32) {
 }
 
 #[derive(Debug)]
-pub struct GridInit {
+pub struct GridWrapper {
     grid: Grid<Tile>,
     offset: i32,
 }
 
-impl GridInit {
+impl GridWrapper {
     pub fn new(rock_paths: Vec<Vec<Pos>>) -> Self {
         let (max_row, min_col, max_col) = get_pos_stats(&rock_paths);
 
@@ -339,8 +339,8 @@ mod tests {
     #[test]
     fn example() {
         let rock_paths = parse_input(&fs::read_to_string("test_input.txt").unwrap());
-        let mut grid_init = GridInit::new(rock_paths);
-        let count = grid_init.drop_sand(Pos::new(0, 500));
+        let mut grid_wrapper = GridWrapper::new(rock_paths);
+        let count = grid_wrapper.drop_sand(Pos::new(0, 500));
 
         assert_eq!(count, 24);
 
@@ -357,14 +357,14 @@ mod tests {
 #########.
 ";
 
-        assert_eq!(grid_init.get_grid_display(), expected_display);
+        assert_eq!(grid_wrapper.get_grid_display(), expected_display);
     }
 
     #[test]
     fn example_part_2() {
         let rock_paths = parse_input(&fs::read_to_string("test_input.txt").unwrap());
-        let mut grid_init = GridInit::new_with_floor(rock_paths, 500);
-        let count = grid_init.drop_sand(Pos::new(0, 500));
+        let mut grid_wrapper = GridWrapper::new_with_floor(rock_paths, 500);
+        let count = grid_wrapper.drop_sand(Pos::new(0, 500));
 
         assert_eq!(count, 93);
 
@@ -383,6 +383,6 @@ mod tests {
 #########################
 ";
 
-        assert_eq!(grid_init.get_grid_display(), expected_display);
+        assert_eq!(grid_wrapper.get_grid_display(), expected_display);
     }
 }
