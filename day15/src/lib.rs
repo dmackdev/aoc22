@@ -6,32 +6,32 @@ use std::{
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pos {
-    x: i32,
-    y: i32,
+    x: i128,
+    y: i128,
 }
 
 impl Pos {
-    fn new(x: i32, y: i32) -> Self {
+    fn new(x: i128, y: i128) -> Self {
         Self { x, y }
     }
 
-    fn distance_to(&self, other: &Self) -> i32 {
+    fn distance_to(&self, other: &Self) -> i128 {
         (self.x - other.x).abs() + (self.y - other.y).abs()
     }
 }
 
-pub fn parse_occupied_positions(input: &str) -> HashMap<i32, Vec<(i32, i32)>> {
+pub fn parse_occupied_positions(input: &str) -> HashMap<i128, Vec<(i128, i128)>> {
     let re = Regex::new(r"x=(-?\d+), y=(-?\d+)").unwrap();
 
-    let mut occupied_map: HashMap<i32, Vec<(i32, i32)>> = HashMap::new();
+    let mut occupied_map: HashMap<i128, Vec<(i128, i128)>> = HashMap::new();
 
     for line in input.lines() {
         for pair in re
             .captures_iter(line)
             .map(|caps| {
                 Pos::new(
-                    caps.get(1).unwrap().as_str().parse::<i32>().unwrap(),
-                    caps.get(2).unwrap().as_str().parse::<i32>().unwrap(),
+                    caps.get(1).unwrap().as_str().parse::<i128>().unwrap(),
+                    caps.get(2).unwrap().as_str().parse::<i128>().unwrap(),
                 )
             })
             .collect::<Vec<_>>()
@@ -58,8 +58,8 @@ pub fn parse_occupied_positions(input: &str) -> HashMap<i32, Vec<(i32, i32)>> {
 }
 
 pub fn get_impossible_positions_for_row(
-    occupied_positions: &HashMap<i32, Vec<(i32, i32)>>,
-    row: i32,
+    occupied_positions: &HashMap<i128, Vec<(i128, i128)>>,
+    row: i128,
 ) -> Vec<Pos> {
     let mut impossible_xs = HashSet::new();
 
@@ -92,8 +92,11 @@ pub fn get_impossible_positions_for_row(
         .collect::<Vec<_>>()
 }
 
-pub fn find_position(occupied_positions: &HashMap<i32, Vec<(i32, i32)>>, max: i32) -> Option<Pos> {
-    let mut out_of_range_map: HashMap<i32, HashSet<i32>> = HashMap::new();
+pub fn find_position(
+    occupied_positions: &HashMap<i128, Vec<(i128, i128)>>,
+    max: i128,
+) -> Option<Pos> {
+    let mut out_of_range_map: HashMap<i128, HashSet<i128>> = HashMap::new();
 
     for (row, occupants) in occupied_positions.iter() {
         for (x, distance_to_beacon) in occupants {
@@ -162,7 +165,7 @@ pub fn find_position(occupied_positions: &HashMap<i32, Vec<(i32, i32)>>, max: i3
     None
 }
 
-pub fn calculate_tuning_frequency(pos: Pos, max: i32) -> i32 {
+pub fn calculate_tuning_frequency(pos: Pos, max: i128) -> i128 {
     pos.x * max + pos.y
 }
 
@@ -178,7 +181,7 @@ mod tests {
 
     use super::*;
 
-    fn assert_positions(positions: &[Pos], expected_xs: &[i32], expected_y: i32) {
+    fn assert_positions(positions: &[Pos], expected_xs: &[i128], expected_y: i128) {
         positions
             .iter()
             .for_each(|pos| assert_eq!(pos.y, expected_y));
@@ -194,7 +197,7 @@ mod tests {
     #[case(9, &[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,])]
     #[case(10, &[-2, -1, 0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])]
     #[case(11, &[-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25])]
-    fn example_impossible_positions_for_row(#[case] row: i32, #[case] expected: &[i32]) {
+    fn example_impossible_positions_for_row(#[case] row: i128, #[case] expected: &[i128]) {
         let occupied_positions =
             parse_occupied_positions(&fs::read_to_string("test_input.txt").unwrap());
 
