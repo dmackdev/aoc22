@@ -93,46 +93,39 @@ pub fn get_impossible_positions_for_row(
 }
 
 pub fn find_position(occupied_positions: &HashMap<i32, Vec<(i32, i32)>>, max: i32) -> Option<Pos> {
-    let mut m: HashMap<usize, Vec<bool>> = HashMap::new();
+    let mut out_of_range_map: HashMap<i32, HashSet<i32>> = HashMap::new();
 
     for (row, occupants) in occupied_positions.iter() {
-        println!("{row}");
         for (x, distance_to_beacon) in occupants {
             if *distance_to_beacon == 0 {
-                // This is a beacon, mark it as impossible location
-                if 0 <= *x && *x <= max && 0 <= *row && *row <= max {
-                    m.entry(*row as usize)
-                        .and_modify(|v| v[*x as usize] = true)
-                        .or_insert_with(|| {
-                            let mut v = vec![false; max as usize + 1];
-                            v[*x as usize] = true;
-                            v
-                        });
-                }
+                // This is a beacon, skip
             } else {
                 let mut count = 0;
                 let mut passed_row = false;
-                for row_to_mark in row - distance_to_beacon..=row + distance_to_beacon {
+                for row_to_mark in row - distance_to_beacon - 1..=row + distance_to_beacon + 1 {
                     let start = cmp::min(x - count, x + count);
                     let end = cmp::max(x - count, x + count);
 
-                    for x_to_mark in start..=end {
+                    for x_to_mark in [start, end] {
                         if 0 <= row_to_mark
                             && row_to_mark <= max
                             && 0 <= x_to_mark
                             && x_to_mark <= max
                         {
-                            m.entry(row_to_mark as usize)
-                                .and_modify(|v| v[x_to_mark as usize] = true)
+                            out_of_range_map
+                                .entry(row_to_mark)
+                                .and_modify(|v| {
+                                    v.insert(x_to_mark);
+                                })
                                 .or_insert_with(|| {
-                                    let mut v = vec![false; max as usize + 1];
-                                    v[x_to_mark as usize] = true;
-                                    v
+                                    let mut set = HashSet::new();
+                                    set.insert(x_to_mark);
+                                    set
                                 });
                         }
                     }
 
-                    if count >= *distance_to_beacon {
+                    if count > *distance_to_beacon {
                         passed_row = true;
                     }
 
@@ -145,15 +138,27 @@ pub fn find_position(occupied_positions: &HashMap<i32, Vec<(i32, i32)>>, max: i3
             }
         }
     }
+    // println!("{:#?}", out_of_range_map);
 
-    for (row, occupied_list) in m.iter() {
-        let result = occupied_list.iter().position(|b| !*b);
+    for (row, out_of_range_xs) in out_of_range_map.iter() {
+        for x in out_of_range_xs {
+            let pos = Pos::new(*x, *row);
+            // Is pos out of range for all sensors?
+            for (sensor_row, sensor_xs) in occupied_positions {
+                if sensor_xs.iter().all(|(sensor_x, sensor_distance)| {
+                    if *sensor_distance == 0 {
+                        return true;
+                    }
 
-        if let Some(x) = result {
-            return Some(Pos::new(x as i32, *row as i32));
+                    let sensor_pos = Pos::new(*sensor_x, *sensor_row);
+
+                    sensor_pos.distance_to(&pos) > *sensor_distance
+                }) {
+                    return Some(pos);
+                }
+            }
         }
     }
-
     None
 }
 
