@@ -1,5 +1,8 @@
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::{
+    cmp,
+    collections::{HashMap, HashSet},
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pos {
@@ -57,7 +60,6 @@ pub fn parse_occupied_positions(input: &str) -> HashMap<i32, Vec<(i32, i32)>> {
 pub fn get_impossible_positions_for_row(
     occupied_positions: &HashMap<i32, Vec<(i32, i32)>>,
     row: i32,
-    remove_all_occupied: bool,
 ) -> Vec<Pos> {
     let mut impossible_xs = HashSet::new();
 
@@ -80,17 +82,7 @@ pub fn get_impossible_positions_for_row(
 
     let xs_to_remove = xs_to_remove
         .iter()
-        .filter_map(|(x, distance)| {
-            if remove_all_occupied {
-                return Some(x);
-            }
-
-            if *distance == 0 {
-                Some(x)
-            } else {
-                None
-            }
-        })
+        .filter_map(|(x, distance)| if *distance == 0 { Some(x) } else { None })
         .collect::<Vec<_>>();
 
     impossible_xs
@@ -101,46 +93,67 @@ pub fn get_impossible_positions_for_row(
 }
 
 pub fn find_position(occupied_positions: &HashMap<i32, Vec<(i32, i32)>>, max: i32) -> Option<Pos> {
-    for row in 0..=max {
-        println!("Row {}", row);
+    let mut m: HashMap<usize, Vec<bool>> = HashMap::new();
 
-        let impossible_positions_for_row =
-            get_impossible_positions_for_row(occupied_positions, row, true);
+    for (row, occupants) in occupied_positions.iter() {
+        println!("{row}");
+        for (x, distance_to_beacon) in occupants {
+            if *distance_to_beacon == 0 {
+                // This is a beacon, mark it as impossible location
+                if 0 <= *x && *x <= max && 0 <= *row && *row <= max {
+                    m.entry(*row as usize)
+                        .and_modify(|v| v[*x as usize] = true)
+                        .or_insert_with(|| {
+                            let mut v = vec![false; max as usize + 1];
+                            v[*x as usize] = true;
+                            v
+                        });
+                }
+            } else {
+                let mut count = 0;
+                let mut passed_row = false;
+                for row_to_mark in row - distance_to_beacon..=row + distance_to_beacon {
+                    let start = cmp::min(x - count, x + count);
+                    let end = cmp::max(x - count, x + count);
 
-        let impossible_positions_for_row = impossible_positions_for_row
-            .into_iter()
-            .filter(|pos| 0 <= pos.x && pos.x <= max)
-            .collect::<Vec<_>>();
+                    for x_to_mark in start..=end {
+                        if 0 <= row_to_mark
+                            && row_to_mark <= max
+                            && 0 <= x_to_mark
+                            && x_to_mark <= max
+                        {
+                            m.entry(row_to_mark as usize)
+                                .and_modify(|v| v[x_to_mark as usize] = true)
+                                .or_insert_with(|| {
+                                    let mut v = vec![false; max as usize + 1];
+                                    v[x_to_mark as usize] = true;
+                                    v
+                                });
+                        }
+                    }
 
-        let num_occupied_positions_in_range = occupied_positions
-            .get(&row)
-            .unwrap_or(&Vec::new())
-            .iter()
-            .filter(|(x, _)| 0 <= *x && *x <= max)
-            .count() as i32;
+                    if count >= *distance_to_beacon {
+                        passed_row = true;
+                    }
 
-        if impossible_positions_for_row.len() as i32 + num_occupied_positions_in_range < max + 1 {
-            let full_range_set = HashSet::<i32>::from_iter(0..=max);
-            let impossible_positions_set =
-                HashSet::<i32>::from_iter(impossible_positions_for_row.iter().map(|p| p.x));
-            let diff = full_range_set
-                .difference(&impossible_positions_set)
-                .collect::<HashSet<&i32>>();
-            let empty = Vec::new();
-            let occupied_set = HashSet::from_iter(
-                occupied_positions
-                    .get(&row)
-                    .unwrap_or(&empty)
-                    .iter()
-                    .map(|(x, _)| x),
-            );
-            let diff = diff.difference(&occupied_set).collect::<Vec<_>>();
-
-            let x = diff.first();
-
-            return Some(Pos::new(***x.unwrap(), row));
+                    if passed_row {
+                        count -= 1;
+                    } else {
+                        count += 1;
+                    }
+                }
+            }
         }
     }
+
+    for (row, occupied_list) in m.iter() {
+        let result = occupied_list.iter().position(|b| !*b);
+
+        if let Some(x) = result {
+            return Some(Pos::new(x as i32, *row as i32));
+        }
+    }
+
     None
 }
 
@@ -180,8 +193,7 @@ mod tests {
         let occupied_positions =
             parse_occupied_positions(&fs::read_to_string("test_input.txt").unwrap());
 
-        let impossible_positions =
-            get_impossible_positions_for_row(&occupied_positions, row, false);
+        let impossible_positions = get_impossible_positions_for_row(&occupied_positions, row);
 
         assert_positions(&impossible_positions, expected, row);
     }
