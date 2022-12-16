@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-use ordered_float::OrderedFloat;
 use pathfinding::prelude::dijkstra;
 use regex::Regex;
 use std::{collections::HashMap, num::ParseIntError, str::FromStr};
@@ -87,10 +86,28 @@ pub fn calculate_total_pressure_released(
         .1
 }
 
-pub fn find_path(valve_map: &ValveMap) -> Vec<Action> {
-    let mut current_valve_name = START_VALVE_NAME.to_string();
-    let mut path = vec![];
-    let mut valid_valve_names = valve_map
+pub fn find_best_path(valve_map: &ValveMap, mins: u32) -> (Vec<Action>, u32) {
+    let possible_paths = find_paths(valve_map, mins);
+
+    let mut best_path = None;
+    let mut total = 0;
+
+    for path in possible_paths {
+        let new_total = calculate_total_pressure_released(valve_map, &path, 30);
+
+        if new_total > total {
+            best_path = Some(path);
+            total = new_total;
+        }
+    }
+
+    (best_path.unwrap(), total)
+}
+
+pub fn find_paths(valve_map: &ValveMap, mins: u32) -> Vec<Vec<Action>> {
+    let current_valve_name = START_VALVE_NAME.to_string();
+    let mut paths = vec![];
+    let valid_valve_names = valve_map
         .values()
         .filter_map(|v| {
             if v.flow_rate > 0 {
@@ -101,55 +118,99 @@ pub fn find_path(valve_map: &ValveMap) -> Vec<Action> {
         })
         .collect::<Vec<_>>();
 
-    valid_valve_names.sort_by_key(|v_name| valve_map.get(v_name).unwrap().flow_rate);
+    paths.append(&mut find_path_given(
+        current_valve_name,
+        &valid_valve_names,
+        valve_map,
+    ));
 
-    while !valid_valve_names.is_empty() {
-        let (next_path, _) = valid_valve_names
+    for i in 0..valid_valve_names.len() {
+        println!("Iteration {}", i);
+
+        let mut new = paths
             .iter()
-            .filter_map(|valid_valve| {
-                dijkstra(
-                    &current_valve_name,
-                    |v_name| {
-                        valve_map
-                            .get(v_name)
-                            .unwrap()
-                            .tunnels
-                            .clone()
-                            .into_iter()
-                            .zip(std::iter::repeat(1))
-                    },
-                    |v_name| v_name == valid_valve,
-                )
-            })
-            .max_by_key(|(path, steps)| {
-                let cumulative_flow_rate: u32 = path
-                    .iter()
-                    .skip(1)
-                    .map(|v_name| {
-                        if valid_valve_names.contains(v_name) {
-                            valve_map.get(v_name).unwrap().flow_rate
-                        } else {
-                            0
-                        }
-                    })
-                    .sum();
-                OrderedFloat(cumulative_flow_rate as f64 / *steps as f64)
-            })
-            .unwrap();
+            .flat_map(|path| {
+                if let Some(Action::Open(last_valve_name)) = path.last() {
+                    let curr_valid_valve_names = &valid_valve_names
+                        .clone()
+                        .into_iter()
+                        .filter(|v| {
+                            !path
+                                .iter()
+                                .filter_map(|act| match act {
+                                    Action::Open(v_name) => Some(v_name),
+                                    _ => None,
+                                })
+                                .any(|x| x == v)
+                        })
+                        .collect::<Vec<_>>();
 
-        let next_destination = next_path.last().unwrap().clone();
-        valid_valve_names.retain(|v| *v != next_destination);
-        path.append(
-            &mut next_path[1..next_path.len() - 1]
-                .iter()
-                .map(|m| Action::MoveTo(m.to_string()))
-                .collect(),
-        );
-        path.push(Action::MoveTo(next_destination.to_string()));
-        path.push(Action::Open(next_destination.to_string()));
-        current_valve_name = next_destination;
+                    let new_paths = find_path_given(
+                        last_valve_name.to_string(),
+                        curr_valid_valve_names,
+                        valve_map,
+                    );
+
+                    return new_paths
+                        .iter()
+                        .filter_map(|new_path| {
+                            if path.len() + new_path.len() > mins as usize {
+                                None
+                            } else {
+                                let mut result = path.clone();
+                                result.append(&mut new_path.clone());
+                                Some(result)
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                }
+                vec![]
+            })
+            .collect::<Vec<_>>();
+
+        paths.append(&mut new);
     }
-    path
+    paths
+}
+
+fn find_path_given(
+    start: String,
+    valid_valve_names: &Vec<String>,
+    valve_map: &ValveMap,
+) -> Vec<Vec<Action>> {
+    let mut paths = vec![];
+
+    for valid_valve_name in valid_valve_names {
+        let path = dijkstra(
+            &start,
+            |v_name| {
+                valve_map
+                    .get(v_name)
+                    .unwrap()
+                    .tunnels
+                    .clone()
+                    .into_iter()
+                    .zip(std::iter::repeat(1))
+            },
+            |v_name| v_name == valid_valve_name,
+        );
+
+        if let Some((path, _)) = path {
+            let destination = path.last().unwrap().clone();
+
+            let mut actions = path[1..path.len() - 1]
+                .iter()
+                .map(|v_name| Action::MoveTo(v_name.to_string()))
+                .collect::<Vec<_>>();
+
+            actions.push(Action::MoveTo(destination.to_string()));
+            actions.push(Action::Open(destination.to_string()));
+
+            paths.push(actions);
+        }
+    }
+
+    paths
 }
 
 #[cfg(test)]
@@ -162,7 +223,7 @@ mod tests {
     fn example_constructed_path() {
         let valve_map = parse_input(&fs::read_to_string("test_input.txt").unwrap());
 
-        let actions = find_path(&valve_map);
+        let (actions, total_pressure_released) = find_best_path(&valve_map, 30);
 
         let expected_actions = [
             Action::MoveTo(String::from("DD")),
@@ -193,9 +254,6 @@ mod tests {
         .to_vec();
 
         assert_eq!(actions, expected_actions);
-
-        let total_pressure_released = calculate_total_pressure_released(&valve_map, &actions, 30);
-
         assert_eq!(total_pressure_released, 1651);
     }
 }
