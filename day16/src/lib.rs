@@ -124,8 +124,11 @@ pub fn find_paths(valve_map: &ValveMap, mins: u32) -> Vec<Vec<Action>> {
         valve_map,
     ));
 
-    for i in 0..valid_valve_names.len() {
-        println!("Iteration {}", i);
+    let num_iterations = valid_valve_names.len();
+    println!("Total iterations: {}", num_iterations);
+
+    for i in 0..num_iterations {
+        println!("Iteration {} of {}", i + 1, num_iterations);
 
         let mut new = paths
             .iter()
@@ -168,6 +171,7 @@ pub fn find_paths(valve_map: &ValveMap, mins: u32) -> Vec<Vec<Action>> {
             })
             .collect::<Vec<_>>();
 
+        paths.retain(|p| p.len() - 2 > i); // Remove previous paths of 2 less than i or smaller because we have added minimum two actions on the last iteration - MoveTo and Open
         paths.append(&mut new);
     }
     paths
