@@ -72,6 +72,8 @@ name = "day16"
 version = "0.1.0"
 dependencies = [
  "lazy_static",
+ "ordered-float",
+ "pathfinding",
  "regex",
 ]
 
@@ -302,10 +304,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "pathfinding"
-version = "4.0.0"
+name = "ordered-float"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ba65132000a419ec9b12d1850a4f73896afd0e8575d4dae41097e17600048f"
+checksum = "d84eb1409416d254e4a9c8fa56cc24701755025b458f0fcd8e59e1f5f40c23bf"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "pathfinding"
+version = "4.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a2c300cc6deada32a75645bd9db32ed0b77dfa3f8e43456bafd84106e72cbcd"
 dependencies = [
  "fixedbitset",
  "indexmap",
